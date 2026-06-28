@@ -34,6 +34,22 @@ export interface Product {
   createdAt: string;
   downloads: number;
   demoUrl?: string;
+
+  // Advanced Product Management Fields
+  status?: 'draft' | 'published' | 'scheduled' | 'archived';
+  scheduledPublishDate?: string;
+  variants?: { id: string; name: string; price: number; licenseType: string; filesIncluded: string[] }[];
+  versions?: { version: string; date: string; changelog: string[] }[];
+  licenseType?: 'personal' | 'commercial' | 'resell' | 'mit' | 'proprietary';
+  previewVideo?: string;
+  gallery?: string[];
+  dependencies?: string[];
+  minimumRequirements?: { [key: string]: string };
+  documentation?: string;
+  faqs?: { question: string; answer: string }[];
+  discountRules?: { percentage: number; active: boolean };
+  flashSale?: { active: boolean; discountPercentage: number; endDate: string; originalPrice: number };
+  coupons?: { code: string; discountPercentage: number; active: boolean }[];
 }
 
 export interface CartItem {

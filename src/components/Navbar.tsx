@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { ShoppingCart, Search, BookOpen, Layout, Code, Music, Layers, Library as LibraryIcon, PlusCircle, Sparkles, Menu, X, Compass } from 'lucide-react';
+import { ShoppingCart, Search, BookOpen, Layout, Code, Music, Layers, Library as LibraryIcon, PlusCircle, Sparkles, Menu, X, Compass, HardDrive } from 'lucide-react';
 import { Product } from '../types';
 
 interface NavbarProps {
-  activeTab: 'marketplace' | 'library' | 'creator';
-  setActiveTab: (tab: 'marketplace' | 'library' | 'creator') => void;
+  activeTab: 'marketplace' | 'library' | 'creator' | 'storage';
+  setActiveTab: (tab: 'marketplace' | 'library' | 'creator' | 'storage') => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   cartCount: number;
@@ -110,6 +110,17 @@ export default function Navbar({
             >
               Sell / Creator Portal
             </button>
+            <button
+              id="nav-storage-tab"
+              onClick={() => setActiveTab('storage')}
+              className={`px-1 py-1.5 text-xs font-bold uppercase tracking-widest transition-all duration-300 cursor-pointer ${
+                activeTab === 'storage'
+                  ? 'text-[#D4FF5E] border-b-2 border-[#D4FF5E]'
+                  : 'text-[#8E9299] hover:text-white border-b-2 border-transparent'
+              }`}
+            >
+              R2 Storage Admin
+            </button>
           </nav>
 
           {/* Cart & Controls */}
@@ -191,6 +202,16 @@ export default function Navbar({
             >
               <PlusCircle className="h-5 w-5" />
               Sell / Creator Portal
+            </button>
+            <button
+              id="mobile-nav-storage"
+              onClick={() => { setActiveTab('storage'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold uppercase tracking-widest ${
+                activeTab === 'storage' ? 'bg-[#161618] text-[#D4FF5E] border border-white/10' : 'text-[#8E9299]'
+              }`}
+            >
+              <HardDrive className="h-5 w-5" />
+              R2 Storage Admin
             </button>
           </div>
 

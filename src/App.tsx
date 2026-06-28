@@ -7,12 +7,13 @@ import CartSidebar from './components/CartSidebar';
 import CheckoutModal from './components/CheckoutModal';
 import Library from './components/Library';
 import CreatorDashboard from './components/CreatorDashboard';
+import StorageDashboard from './components/StorageDashboard';
 import { INITIAL_PRODUCTS } from './data';
 import { Product, CartItem, Purchase, Review } from './types';
 
 export default function App() {
   // Global React States
-  const [activeTab, setActiveTab] = useState<'marketplace' | 'library' | 'creator'>('marketplace');
+  const [activeTab, setActiveTab] = useState<'marketplace' | 'library' | 'creator' | 'storage'>('marketplace');
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [purchased, setPurchased] = useState<{ id: string; title: string; price: number; coverImage: string; category: string; downloadUrl: string }[]>([]);
@@ -376,7 +377,12 @@ export default function App() {
           <CreatorDashboard
             products={products}
             onPublishProduct={handlePublishProduct}
+            onUpdateProducts={saveProductsToStorage}
           />
+        )}
+
+        {activeTab === 'storage' && (
+          <StorageDashboard />
         )}
 
       </main>
