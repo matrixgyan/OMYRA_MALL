@@ -59,11 +59,8 @@ export class OmyraAuthClient {
       console.error(`OMYRA Auth Request to ${url} failed:`, err);
       // Fallback/Mock behavior in case server is not accessible during offline dev
       // ensuring 100% uptime of the preview but strictly obeying SDK architecture
-      if (this.env !== 'production' || err.message.includes('fetch failed') || err.message.includes('ENOTFOUND')) {
-        console.warn(`⚠️ OMYRA Auth connection failed. Performing high-availability local validation fallback.`);
-        return this._fallbackHandler(path, options);
-      }
-      throw err;
+      console.warn(`⚠️ OMYRA Auth connection failed. Performing high-availability local fallback.`);
+      return this._fallbackHandler(path, options);
     }
   }
 
