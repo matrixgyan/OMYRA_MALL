@@ -7,7 +7,7 @@ import { createServer as createViteServer } from 'vite';
 import { initializeDatabase, dbAll, dbGet, dbRun, getLocalDb, saveLocalDb } from './server/db.js';
 import { StorageService, BUCKET_DOWNLOADS, BUCKET_ASSETS, BUCKET_USER, BUCKET_TEMP } from './server/storage-service.js';
 import { UploadEngine } from './server/upload-engine.js';
-import { EmailService } from './server/email-service.js';
+import { EmailService, getResendClient } from './server/email-service.js';
 import { DatabaseService } from './server/database-service.js';
 import { OmyraAuthClient } from '@omyra/server';
 import { omyraAuthMiddleware, requireOmyraSession } from '@omyra/express';
@@ -78,6 +78,115 @@ const requireAuth = (req: express.Request, res: express.Response, next: express.
   next();
 };
 
+// Comprehensive production-grade authentication error logger
+async function logAuthErrorAndRespond(
+  err: any,
+  req: express.Request,
+  res: express.Response,
+  endpoint: string,
+  statusCode = 400
+) {
+  const requestId = `req_auth_${crypto.randomUUID()}`;
+  const timestamp = new Date().toISOString();
+
+  // Check Database URL status
+  const hasDbUrl = !!process.env.DATABASE_URL;
+
+  // Check Omyra API Key and URL
+  const hasOmyraApiKey = !!process.env.OMYRA_API_KEY;
+  const omyraAuthUrl = process.env.OMYRA_AUTH_URL || 'https://auth.omyra.org';
+
+  // Check PostgreSQL connection failure
+  let pgConnectionStatus = 'Not Configured';
+  if (hasDbUrl) {
+    try {
+      const pool = DatabaseService.getPool();
+      if (!pool) {
+        pgConnectionStatus = 'Failure (Pool is null/uninitialized)';
+      } else {
+        // Run a lightweight probe to see if connection is healthy
+        const probeResult = await Promise.race([
+          pool.query('SELECT 1'),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('PostgreSQL connection timeout (1.5s)')), 1500))
+        ]);
+        if (probeResult && probeResult.rowCount !== null) {
+          pgConnectionStatus = 'Healthy';
+        } else {
+          pgConnectionStatus = 'Failure (Invalid probe result)';
+        }
+      }
+    } catch (pgErr: any) {
+      pgConnectionStatus = `Failure (${pgErr.message})`;
+    }
+  }
+
+  // Check OMYRA Auth SDK exceptions
+  let isOmyraSdkException = 'No';
+  if (err && (
+    err.message?.includes('OMYRA') || 
+    err.message?.includes('omyra') || 
+    err.stack?.includes('OmyraAuthClient') || 
+    err.message?.includes('fetch failed')
+  )) {
+    isOmyraSdkException = `Yes: ${err.message}`;
+  }
+
+  // Check Resend initialization status
+  let resendInitStatus = 'Not Configured';
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const { client, isLocal } = getResendClient();
+      if (isLocal && !client) {
+        resendInitStatus = 'Failure (Resend is in offline/local fallback mode)';
+      } else if (client) {
+        resendInitStatus = 'Healthy';
+      } else {
+        resendInitStatus = 'Unknown (Client is null but not local)';
+      }
+    } catch (resendErr: any) {
+      resendInitStatus = `Failure (${resendErr.message})`;
+    }
+  }
+
+  // Write comprehensive error logs to standard error
+  console.error(`
+============================================================
+🚨 AUTHENTICATION ENDPOINT FAILURE
+============================================================
+Endpoint:       ${req.method} ${endpoint}
+Request ID:     ${requestId}
+Timestamp:      ${timestamp}
+Client IP:      ${req.ip || '127.0.0.1'}
+User Agent:     ${req.headers['user-agent'] || 'Unknown'}
+
+ENVIRONMENT CONFIGURATION:
+- DATABASE_URL Loaded:   ${hasDbUrl ? 'YES (Masked)' : 'NO'}
+- OMYRA_API_KEY Loaded:  ${hasOmyraApiKey ? 'YES (Masked)' : 'NO'}
+- OMYRA_AUTH_URL Loaded: ${process.env.OMYRA_AUTH_URL ? 'YES' : 'NO'} (URL: ${omyraAuthUrl})
+
+INTEGRATION SERVICES HEALTH STATUS:
+- PostgreSQL Connection:  ${pgConnectionStatus}
+- Resend Platform:        ${resendInitStatus}
+- OMYRA Auth SDK Exception: ${isOmyraSdkException}
+
+EXCEPTION DETAILS:
+Message:        ${err.message || 'No explicit message'}
+Stack Trace:
+${err.stack || 'No stack trace available'}
+============================================================
+  `.trim());
+
+  // Return a sanitized, clean, production-ready JSON response
+  return res.status(statusCode).json({
+    success: false,
+    error: 'An internal error occurred during the authentication process.',
+    message: err.message || 'Internal Server Error',
+    requestId,
+    endpoint,
+    timestamp
+  });
+}
+
 // ==========================================
 // API ENDPOINTS: OMYRA AUTHENTICATION SYSTEM
 // ==========================================
@@ -106,7 +215,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     return res.json({ success: true, user });
   } catch (err: any) {
-    return res.status(400).json({ success: false, error: err.message });
+    return logAuthErrorAndRespond(err, req, res, '/api/auth/register', 400);
   }
 });
 
@@ -138,14 +247,16 @@ app.post('/api/auth/login', async (req, res) => {
 
     return res.json({ success: true, session });
   } catch (err: any) {
-    // Log failed login event
-    await omyraClient.logSecurityEvent({
-      eventType: 'AUTH_LOGIN_FAILURE',
-      ipAddress: req.ip || '127.0.0.1',
-      userAgent: req.headers['user-agent'] || 'Browser',
-      details: { email: req.body.email, error: err.message }
-    });
-    return res.status(400).json({ success: false, error: err.message });
+    // Log failed login event securely
+    try {
+      await omyraClient.logSecurityEvent({
+        eventType: 'AUTH_LOGIN_FAILURE',
+        ipAddress: req.ip || '127.0.0.1',
+        userAgent: req.headers['user-agent'] || 'Browser',
+        details: { email: req.body.email, error: err.message }
+      });
+    } catch (e) {}
+    return logAuthErrorAndRespond(err, req, res, '/api/auth/login', 400);
   }
 });
 
@@ -170,7 +281,7 @@ app.post('/api/auth/logout', async (req, res) => {
 
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
+    return logAuthErrorAndRespond(err, req, res, '/api/auth/logout', 500);
   }
 });
 
@@ -189,7 +300,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
     return res.json({ success: true, message: 'Password reset link sent to your email.' });
   } catch (err: any) {
-    return res.status(400).json({ success: false, error: err.message });
+    return logAuthErrorAndRespond(err, req, res, '/api/auth/forgot-password', 400);
   }
 });
 
@@ -207,7 +318,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
 
     return res.json({ success: true, message: 'Your password has been reset successfully.' });
   } catch (err: any) {
-    return res.status(400).json({ success: false, error: err.message });
+    return logAuthErrorAndRespond(err, req, res, '/api/auth/reset-password', 400);
   }
 });
 
@@ -218,28 +329,36 @@ app.post('/api/auth/verify-email', async (req, res) => {
     await omyraClient.verifyEmail(token);
     return res.json({ success: true, message: 'Email verified successfully.' });
   } catch (err: any) {
-    return res.status(400).json({ success: false, error: err.message });
+    return logAuthErrorAndRespond(err, req, res, '/api/auth/verify-email', 400);
   }
 });
 
 // Retrieve Authenticated User (Get Me)
 app.get('/api/auth/me', async (req, res) => {
-  if (!req.omyraUser) {
-    return res.json({ success: true, user: null });
+  try {
+    if (!req.omyraUser) {
+      return res.json({ success: true, user: null });
+    }
+    return res.json({ success: true, user: req.omyraUser });
+  } catch (err: any) {
+    return logAuthErrorAndRespond(err, req, res, '/api/auth/me', 500);
   }
-  return res.json({ success: true, user: req.omyraUser });
 });
 
 // Retrieve Session details
 app.get('/api/auth/session', async (req, res) => {
-  if (!req.omyraUser) {
-    return res.status(401).json({ success: false, error: 'No active session.' });
+  try {
+    if (!req.omyraUser) {
+      return res.status(401).json({ success: false, error: 'No active session.' });
+    }
+    return res.json({
+      success: true,
+      user: req.omyraUser,
+      token: req.omyraSessionToken
+    });
+  } catch (err: any) {
+    return logAuthErrorAndRespond(err, req, res, '/api/auth/session', 500);
   }
-  return res.json({
-    success: true,
-    user: req.omyraUser,
-    token: req.omyraSessionToken
-  });
 });
 
 // ==========================================
