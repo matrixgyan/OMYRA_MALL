@@ -1,0 +1,10 @@
+{
+  "name": "@omyra/express",
+  "version": "1.0.0",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "type": "module",
+  "peerDependencies": {
+    "express": "^4.0.0 || ^5.0.0"
+  }
+}

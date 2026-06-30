@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import pg from 'pg';
+import { createLocationsSchema, seedLocationsPostgres, seedLocationsMemory } from './location-seeder.js';
 
 const DB_FILE = path.join(process.cwd(), 'storage_metadata.json');
 
@@ -24,6 +25,15 @@ interface Schema {
   EmailLogs: any[];
   EmailEvents: any[];
   DeliveryAttempts: any[];
+  countries?: any[];
+  states?: any[];
+  CreatorProfiles?: any[];
+  CreatorStores?: any[];
+  CreatorAddresses?: any[];
+  CreatorDocuments?: any[];
+  CreatorUploads?: any[];
+  CreatorVerificationStatus?: any[];
+  CreatorAuditLogs?: any[];
 }
 
 // Global in-memory DB state for local mode
@@ -46,6 +56,15 @@ let dbData: Schema = {
   EmailLogs: [],
   EmailEvents: [],
   DeliveryAttempts: [],
+  countries: [],
+  states: [],
+  CreatorProfiles: [],
+  CreatorStores: [],
+  CreatorAddresses: [],
+  CreatorDocuments: [],
+  CreatorUploads: [],
+  CreatorVerificationStatus: [],
+  CreatorAuditLogs: []
 };
 
 import { DatabaseService } from './database-service.js';
@@ -95,6 +114,15 @@ function loadFromDisk() {
         EmailLogs: loaded.EmailLogs || [],
         EmailEvents: loaded.EmailEvents || [],
         DeliveryAttempts: loaded.DeliveryAttempts || [],
+        countries: loaded.countries || [],
+        states: loaded.states || [],
+        CreatorProfiles: loaded.CreatorProfiles || [],
+        CreatorStores: loaded.CreatorStores || [],
+        CreatorAddresses: loaded.CreatorAddresses || [],
+        CreatorDocuments: loaded.CreatorDocuments || [],
+        CreatorUploads: loaded.CreatorUploads || [],
+        CreatorVerificationStatus: loaded.CreatorVerificationStatus || [],
+        CreatorAuditLogs: loaded.CreatorAuditLogs || []
       };
       console.log('⚡ Local database loaded successfully from storage_metadata.json');
     }
@@ -113,6 +141,11 @@ function convertSqlToPostgres(sql: string): string {
   if (pgSql.includes('INSERT OR IGNORE INTO StorageBuckets')) {
     pgSql = pgSql.replace('INSERT OR IGNORE INTO StorageBuckets', 'INSERT INTO StorageBuckets');
     pgSql += ' ON CONFLICT (name) DO NOTHING';
+  }
+
+  // Convert INSERT INTO EmailTemplates
+  if (pgSql.includes('INSERT INTO EmailTemplates') && !pgSql.includes('ON CONFLICT')) {
+    pgSql += ' ON CONFLICT (id) DO NOTHING';
   }
 
   // Convert SQLite specific CURRENT_TIMESTAMP overrides or syntax if needed.
@@ -368,7 +401,135 @@ export async function initializeDatabase() {
           )
         `);
 
+        // OMYRA SELL / CREATOR PORTAL Onboarding relational tables
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS CreatorProfiles (
+            id UUID PRIMARY KEY,
+            user_id VARCHAR(255) NOT NULL UNIQUE,
+            first_name VARCHAR(100) NOT NULL,
+            last_name VARCHAR(100) NOT NULL,
+            email VARCHAR(255) NOT NULL,
+            phone VARCHAR(50) NOT NULL,
+            phone_country_code VARCHAR(10),
+            avatar_url TEXT,
+            bio TEXT,
+            current_step INTEGER DEFAULT 1,
+            status VARCHAR(50) DEFAULT 'Draft',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS CreatorStores (
+            id UUID PRIMARY KEY,
+            profile_id UUID NOT NULL REFERENCES CreatorProfiles(id) ON DELETE CASCADE,
+            store_id_string VARCHAR(100) UNIQUE NOT NULL,
+            store_slug VARCHAR(100) UNIQUE NOT NULL,
+            store_name VARCHAR(255) UNIQUE NOT NULL,
+            description TEXT,
+            banner_url TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS CreatorAddresses (
+            id UUID PRIMARY KEY,
+            profile_id UUID NOT NULL REFERENCES CreatorProfiles(id) ON DELETE CASCADE,
+            address_line1 VARCHAR(255) NOT NULL,
+            address_line2 VARCHAR(255),
+            city VARCHAR(100) NOT NULL,
+            state_id INTEGER REFERENCES states(id),
+            country_id INTEGER REFERENCES countries(id),
+            postal_code VARCHAR(20) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS CreatorDocuments (
+            id UUID PRIMARY KEY,
+            profile_id UUID NOT NULL REFERENCES CreatorProfiles(id) ON DELETE CASCADE,
+            doc_type VARCHAR(50) NOT NULL,
+            issuing_country_id INTEGER REFERENCES countries(id),
+            doc_number_encrypted TEXT NOT NULL,
+            expiry_date DATE,
+            file_key TEXT NOT NULL,
+            bucket VARCHAR(255) NOT NULL,
+            original_filename TEXT NOT NULL,
+            content_type VARCHAR(100) NOT NULL,
+            file_size BIGINT NOT NULL,
+            status VARCHAR(50) DEFAULT 'Pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS CreatorUploads (
+            id UUID PRIMARY KEY,
+            profile_id UUID NOT NULL REFERENCES CreatorProfiles(id) ON DELETE CASCADE,
+            file_key TEXT NOT NULL,
+            bucket VARCHAR(255) NOT NULL,
+            original_filename TEXT NOT NULL,
+            content_type VARCHAR(100) NOT NULL,
+            file_size BIGINT NOT NULL,
+            upload_type VARCHAR(50) NOT NULL,
+            status VARCHAR(50) DEFAULT 'Active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS CreatorVerificationStatus (
+            id UUID PRIMARY KEY,
+            profile_id UUID NOT NULL REFERENCES CreatorProfiles(id) ON DELETE CASCADE,
+            step VARCHAR(50) NOT NULL,
+            status VARCHAR(50) NOT NULL,
+            comment TEXT,
+            reviewer_id VARCHAR(255),
+            reviewed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS CreatorAuditLogs (
+            id UUID PRIMARY KEY,
+            user_id VARCHAR(255) NOT NULL,
+            action VARCHAR(100) NOT NULL,
+            ip_address VARCHAR(45) NOT NULL,
+            device_info TEXT NOT NULL,
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+
+        // Index optimizations for creator tables
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_creator_profiles_user_id ON CreatorProfiles (user_id);
+          CREATE INDEX IF NOT EXISTS idx_creator_stores_profile ON CreatorStores (profile_id);
+          CREATE INDEX IF NOT EXISTS idx_creator_stores_slug ON CreatorStores (store_slug);
+          CREATE INDEX IF NOT EXISTS idx_creator_addresses_profile ON CreatorAddresses (profile_id);
+          CREATE INDEX IF NOT EXISTS idx_creator_documents_profile ON CreatorDocuments (profile_id);
+          CREATE INDEX IF NOT EXISTS idx_creator_uploads_profile ON CreatorUploads (profile_id);
+        `);
+
         // Index optimizations for production queries
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_email_jobs_pending 
+          ON EmailJobs (priority DESC, created_at ASC) 
+          WHERE status = 'pending'
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_email_jobs_failed 
+          ON EmailJobs (priority DESC, created_at ASC) 
+          WHERE status = 'failed'
+        `);
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_email_jobs_status_priority_created_at 
           ON EmailJobs (status, priority DESC, created_at ASC)
@@ -395,7 +556,8 @@ export async function initializeDatabase() {
           { name: 'omyra-market-downloads', provider: 'r2', region: 'auto', visibility: 'private' },
           { name: 'omyra-market-assets', provider: 'r2', region: 'auto', visibility: 'public' },
           { name: 'omyra-user-content', provider: 'r2', region: 'auto', visibility: 'public' },
-          { name: 'omyra-temp-uploads', provider: 'r2', region: 'auto', visibility: 'private' }
+          { name: 'omyra-temp-uploads', provider: 'r2', region: 'auto', visibility: 'private' },
+          { name: 'omyra-secure-documents', provider: 'r2', region: 'auto', visibility: 'private' }
         ];
 
         for (const b of defaultBuckets) {
@@ -406,6 +568,10 @@ export async function initializeDatabase() {
             [b.name, b.provider, b.region, b.visibility]
           );
         }
+
+        // Initialize Global Location System in Postgres
+        await createLocationsSchema(client);
+        await seedLocationsPostgres(client);
 
         await client.query('COMMIT');
         console.log('⚡ Neon PostgreSQL Cloud database tables initialized and verified successfully.');
@@ -419,17 +585,20 @@ export async function initializeDatabase() {
       console.error('❌ Failed to run migrations on Neon database, using JSON fallback:', err);
       isPostgresMode = false;
       loadFromDisk();
+      seedLocationsMemory(dbData, saveToDisk);
     }
   } else {
     // Run local JSON fallback initialization
     loadFromDisk();
+    seedLocationsMemory(dbData, saveToDisk);
 
     // Seed default buckets in local mode
     const defaultBuckets = [
       { name: 'omyra-market-downloads', provider: 'r2', region: 'auto', visibility: 'private', created_at: new Date().toISOString() },
       { name: 'omyra-market-assets', provider: 'r2', region: 'auto', visibility: 'public', created_at: new Date().toISOString() },
       { name: 'omyra-user-content', provider: 'r2', region: 'auto', visibility: 'public', created_at: new Date().toISOString() },
-      { name: 'omyra-temp-uploads', provider: 'r2', region: 'auto', visibility: 'private', created_at: new Date().toISOString() }
+      { name: 'omyra-temp-uploads', provider: 'r2', region: 'auto', visibility: 'private', created_at: new Date().toISOString() },
+      { name: 'omyra-secure-documents', provider: 'r2', region: 'auto', visibility: 'private', created_at: new Date().toISOString() }
     ];
 
     for (const b of defaultBuckets) {
@@ -810,7 +979,9 @@ export async function dbRun(sql: string, params: any[] = []): Promise<void> {
   // Dynamic inserts or updates for other tables in local mode
   const tables = [
     'Users', 'Profiles', 'Sellers', 'Products', 'Orders', 'OrderItems', 'Reviews',
-    'EmailTemplates', 'EmailJobs', 'EmailLogs', 'EmailEvents', 'DeliveryAttempts'
+    'EmailTemplates', 'EmailJobs', 'EmailLogs', 'EmailEvents', 'DeliveryAttempts',
+    'CreatorProfiles', 'CreatorStores', 'CreatorAddresses', 'CreatorDocuments',
+    'CreatorUploads', 'CreatorVerificationStatus', 'CreatorAuditLogs'
   ];
 
   for (const table of tables) {
@@ -914,6 +1085,22 @@ export async function dbGet(sql: string, params: any[] = []): Promise<any | null
     return { count };
   }
 
+  // SELECT * FROM countries WHERE id = ? or iso2 = ?
+  if (query.includes('FROM countries WHERE id =') || query.includes('from countries where id =')) {
+    const id = Number(params[0]);
+    return (dbData.countries || []).find((c: any) => c.id === id) || null;
+  }
+  if (query.includes('FROM countries WHERE iso2 =') || query.includes('from countries where iso2 =')) {
+    const iso2 = params[0];
+    return (dbData.countries || []).find((c: any) => c.iso2 === iso2) || null;
+  }
+
+  // SELECT * FROM states WHERE id = ?
+  if (query.includes('FROM states WHERE id =') || query.includes('from states where id =')) {
+    const id = Number(params[0]);
+    return (dbData.states || []).find((s: any) => s.id === id) || null;
+  }
+
   console.warn('⚠️ dbGet Query was not matched in local fallback:', query);
   return null;
 }
@@ -997,7 +1184,7 @@ export async function dbAll(sql: string, params: any[] = []): Promise<any[]> {
   }
 
   // SELECT * FROM EmailJobs WHERE status = 'pending' OR status = 'failed' ORDER BY priority DESC, created_at ASC LIMIT 5
-  if (query.includes("SELECT * FROM EmailJobs WHERE status = 'pending' OR status = 'failed'")) {
+  if (query.includes("SELECT * FROM EmailJobs WHERE status = 'pending' OR status = 'failed'") || (query.includes("UNION ALL") && query.includes("EmailJobs"))) {
     const pendingAndFailed = dbData.EmailJobs.filter((j) => j.status === 'pending' || j.status === 'failed');
     const sorted = pendingAndFailed.sort((a, b) => {
       if (b.priority !== a.priority) {
@@ -1016,6 +1203,40 @@ export async function dbAll(sql: string, params: any[] = []): Promise<any[]> {
     return sorted.slice(0, 10);
   }
 
+  // SELECT * FROM countries
+  if (query.includes('FROM countries') || query.includes('from countries')) {
+    const activeOnly = query.includes('active = true') || query.includes('active = TRUE');
+    let list = dbData.countries || [];
+    if (activeOnly) {
+      list = list.filter((c: any) => c.active !== false);
+    }
+    return [...list].sort((a, b) => a.official_name.localeCompare(b.official_name));
+  }
+
+  // SELECT * FROM states WHERE country_id = ?
+  if (query.includes('FROM states WHERE country_id =') || query.includes('from states where country_id =') || query.includes('country_id = $1')) {
+    const countryId = Number(params[0]);
+    let list = (dbData.states || []).filter((s: any) => s.country_id === countryId);
+    if (query.includes('active = true') || query.includes('active = TRUE')) {
+      list = list.filter((s: any) => s.active !== false);
+    }
+    return [...list].sort((a, b) => a.official_name.localeCompare(b.official_name));
+  }
+
   console.warn('⚠️ dbAll Query was not matched in local fallback:', query);
   return [];
+}
+
+/**
+ * Access the active in-memory database instance directly (for robust local onboarding setup)
+ */
+export function getLocalDb(): Schema {
+  return dbData;
+}
+
+/**
+ * Persist the in-memory database to local storage file on disk
+ */
+export function saveLocalDb(): void {
+  saveToDisk();
 }

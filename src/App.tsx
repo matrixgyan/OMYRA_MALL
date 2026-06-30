@@ -7,16 +7,30 @@ import CartSidebar from './components/CartSidebar';
 import CheckoutModal from './components/CheckoutModal';
 import Library from './components/Library';
 import CreatorDashboard from './components/CreatorDashboard';
-import StorageDashboard from './components/StorageDashboard';
+import AccountSection from './components/AccountSection';
+import OmyraAuthView from './components/OmyraAuthView';
 import { INITIAL_PRODUCTS } from './data';
 import { Product, CartItem, Purchase, Review } from './types';
 
 export default function App() {
   // Global React States
-  const [activeTab, setActiveTab] = useState<'marketplace' | 'library' | 'creator' | 'storage'>('marketplace');
+  const [activeTab, setActiveTab] = useState<'marketplace' | 'library' | 'creator' | 'account'>('marketplace');
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [purchased, setPurchased] = useState<{ id: string; title: string; price: number; coverImage: string; category: string; downloadUrl: string }[]>([]);
+  const [currentUser, setCurrentUser] = useState<any | null>(null);
+
+  // Fetch OMYRA Auth Session details on mount
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.user) {
+          setCurrentUser(data.user);
+        }
+      })
+      .catch(() => {});
+  }, []);
   
   // Browsing filters
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -374,15 +388,65 @@ export default function App() {
         )}
 
         {activeTab === 'creator' && (
-          <CreatorDashboard
-            products={products}
-            onPublishProduct={handlePublishProduct}
-            onUpdateProducts={saveProductsToStorage}
-          />
+          !currentUser ? (
+            <div id="creator-auth-gate" className="py-8 space-y-6">
+              <div className="text-center max-w-md mx-auto space-y-3">
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#D4FF5E]/10 px-3.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-[#D4FF5E] border border-[#D4FF5E]/20">
+                  Creator Registration Required
+                </span>
+                <h2 className="text-2xl font-black uppercase text-white tracking-tight">Access Creator Portal</h2>
+                <p className="text-xs text-slate-400 font-semibold leading-relaxed">
+                  Log in to submit templates, audit secure folders, retrieve developer ZIP streams, and manage listings in OMYRA MALL.
+                </p>
+              </div>
+              <OmyraAuthView onAuthSuccess={setCurrentUser} initialMode="login" />
+            </div>
+          ) : (
+            <CreatorDashboard
+              products={products}
+              onPublishProduct={handlePublishProduct}
+              onUpdateProducts={saveProductsToStorage}
+              onCancel={() => {
+                setActiveTab('marketplace');
+                setSelectedCategory('all');
+              }}
+            />
+          )
         )}
 
-        {activeTab === 'storage' && (
-          <StorageDashboard />
+        {activeTab === 'account' && (
+          !currentUser ? (
+            <div id="account-auth-gate" className="py-8 space-y-6">
+              <div className="text-center max-w-md mx-auto space-y-3">
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#D4FF5E]/10 px-3.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-[#D4FF5E] border border-[#D4FF5E]/20">
+                  Security Vault Verification
+                </span>
+                <h2 className="text-2xl font-black uppercase text-white tracking-tight">Access Customer Account</h2>
+                <p className="text-xs text-slate-400 font-semibold leading-relaxed">
+                  Verify your decentralized identity to view invoices, download purchase licenses, and refresh security backup tokens.
+                </p>
+              </div>
+              <OmyraAuthView onAuthSuccess={setCurrentUser} initialMode="login" />
+            </div>
+          ) : (
+            <AccountSection
+              purchasedAssets={purchased}
+              currentUser={currentUser}
+              onLogout={async () => {
+                try {
+                  await fetch('/api/auth/logout', { method: 'POST' });
+                } catch (e) {}
+                setCurrentUser(null);
+                setActiveTab('marketplace');
+              }}
+              onSwitchToTab={(tab) => {
+                setActiveTab(tab);
+                if (tab === 'marketplace') {
+                  setSelectedCategory('all');
+                }
+              }}
+            />
+          )
         )}
 
       </main>

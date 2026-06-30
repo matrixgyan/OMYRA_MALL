@@ -228,6 +228,175 @@ export const EMAIL_TEMPLATES = {
       </html>
     `,
     text: `SECURITY ALERT: OMYRA Mall Account Activity\n\nDear {{userName}},\n\nAutomated Security Shield has detected account activity:\nEvent: {{action}}\nDate/Time: {{timestamp}}\nIP: {{ipAddress}}\nDevice: {{deviceInfo}}\n\nIf this was not you, please immediately contact security@mall.omyra.org.\n\n© 2026 OMYRA Mall.`
+  },
+  CREATOR_SUBMITTED: {
+    id: 'tpl-creator-submitted',
+    name: 'Creator Onboarding Submitted',
+    subject: 'Your OMYRA Mall Creator Application is Under Review! 🚀',
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>OMYRA Creator Application Under Review</title>
+        <style>
+          body { font-family: 'Inter', sans-serif; background-color: #0b0b0c; color: #ffffff; margin: 0; padding: 20px; }
+          .container { max-width: 600px; margin: 0 auto; background-color: #161618; border-radius: 12px; border: 1px solid #27272a; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+          .header { text-align: center; border-bottom: 1px solid #27272a; padding-bottom: 20px; margin-bottom: 24px; }
+          .logo { font-size: 24px; font-weight: bold; color: #D4FF5E; text-transform: uppercase; letter-spacing: 2px; }
+          .content { line-height: 1.6; color: #e4e4e7; }
+          .status-badge { display: inline-block; background-color: rgba(234, 179, 8, 0.1); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.2); font-weight: bold; text-decoration: none; padding: 8px 16px; border-radius: 8px; margin: 15px 0; text-transform: uppercase; letter-spacing: 1px; font-size: 12px; }
+          .footer { text-align: center; color: #71717a; font-size: 12px; border-top: 1px solid #27272a; padding-top: 20px; margin-top: 32px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <span class="logo">OMYRA MALL</span>
+          </div>
+          <div class="content">
+            <h3>Hello {{userName}},</h3>
+            <p>We are thrilled to receive your application to join the OMYRA Mall elite creator network! Thank you for showing interest in selling your digital assets on our platform.</p>
+            
+            <p>Your shop registration details have been received and are currently being validated by our Onboarding Compliance Team.</p>
+            
+            <div style="text-align: center;">
+              <span class="status-badge">Application Status: Under Review ⏳</span>
+            </div>
+            
+            <p><strong>Shop Name:</strong> {{shopName}}<br/>
+            <strong>Shop Username:</strong> {{shopUsername}}<br/>
+            <strong>Shop URL:</strong> <a href="https://mall.omyra.org/{{shopUsername}}" style="color: #D4FF5E;">https://mall.omyra.org/{{shopUsername}}</a></p>
+            
+            <p>Our verification processes usually take between <strong>24 to 72 hours</strong>. We will check your submitted identity proofs and store configurations against our global regulatory standards. You can check your live application status anytime by visiting the <strong>SELL / CREATOR PORTAL</strong> inside the OMYRA Mall app.</p>
+            
+            <p>If we require any additional files or clarifications, we will reach out directly to your registered email address.</p>
+            
+            <p>Best regards,<br/>OMYRA Mall Seller Compliance Division</p>
+          </div>
+          <div class="footer">
+            <p>© 2026 OMYRA Mall Infrastructure Layer. All rights reserved.</p>
+            <p>This is an automated transactional email regarding your creator application. Replies to this email are unmonitored.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `Hello {{userName}},\n\nWe are thrilled to receive your application to join the OMYRA Mall elite creator network!\n\nYour shop registration details are currently under review.\nApplication Status: Under Review (24-72 Hours)\nShop Name: {{shopName}}\nShop Username: {{shopUsername}}\nShop URL: https://mall.omyra.org/{{shopUsername}}\n\nYou can check your application status by clicking SELL / CREATOR PORTAL.\n\n© 2026 OMYRA Mall Seller Compliance Division.`
+  },
+  CREATOR_APPROVED: {
+    id: 'tpl-creator-approved',
+    name: 'Creator Onboarding Approved',
+    subject: 'Congratulations! Your OMYRA Creator Application is Approved 🎉',
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Welcome to OMYRA Mall Creator Workspace</title>
+        <style>
+          body { font-family: 'Inter', sans-serif; background-color: #0b0b0c; color: #ffffff; margin: 0; padding: 20px; }
+          .container { max-width: 600px; margin: 0 auto; background-color: #161618; border-radius: 12px; border: 1px solid #27272a; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+          .header { text-align: center; border-bottom: 1px solid #27272a; padding-bottom: 20px; margin-bottom: 24px; }
+          .logo { font-size: 24px; font-weight: bold; color: #D4FF5E; text-transform: uppercase; letter-spacing: 2px; }
+          .content { line-height: 1.6; color: #e4e4e7; }
+          .status-badge { display: inline-block; background-color: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); font-weight: bold; text-decoration: none; padding: 8px 16px; border-radius: 8px; margin: 15px 0; text-transform: uppercase; letter-spacing: 1px; font-size: 12px; }
+          .btn { display: inline-block; background-color: #D4FF5E; color: #000000; font-weight: bold; text-decoration: none; padding: 12px 24px; border-radius: 8px; margin-top: 20px; text-transform: uppercase; letter-spacing: 1px; font-size: 14px; text-align: center; }
+          .footer { text-align: center; color: #71717a; font-size: 12px; border-top: 1px solid #27272a; padding-top: 20px; margin-top: 32px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <span class="logo">OMYRA MALL</span>
+          </div>
+          <div class="content">
+            <h3>Congratulations {{userName}}! 🎉</h3>
+            <p>We are excited to inform you that your application has been officially <strong>APPROVED</strong>! You are now a certified digital merchant in the OMYRA Mall ecosystem.</p>
+            
+            <div style="text-align: center;">
+              <span class="status-badge">Application Status: Approved ✅</span>
+            </div>
+            
+            <p>Your shop, <strong>{{shopName}}</strong>, is now live. You can upload digital products, design templates, code assets, audio assets, and start receiving secure payouts directly to your registered account.</p>
+            
+            <p><strong>Your Store Link:</strong> <a href="https://mall.omyra.org/{{shopUsername}}" style="color: #D4FF5E;">https://mall.omyra.org/{{shopUsername}}</a></p>
+            
+            <p>Please log in and visit your creator workspace to configure your product catalog and begin publishing!</p>
+            
+            <div style="text-align: center; margin-top: 10px;">
+              <a href="https://mall.omyra.org" class="btn">Launch Creator Workspace</a>
+            </div>
+            
+            <p style="margin-top: 24px;">Welcome to the future of digital asset commerce. We are honored to scale with you.</p>
+            
+            <p>Best regards,<br/>OMYRA Mall Seller Relations Division</p>
+          </div>
+          <div class="footer">
+            <p>© 2026 OMYRA Mall Infrastructure Layer. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `Congratulations {{userName}}! 🎉\n\nYour application has been officially APPROVED! You are now a certified digital creator at OMYRA Mall.\n\nShop Name: {{shopName}}\nShop Username: {{shopUsername}}\nStore Link: https://mall.omyra.org/{{shopUsername}}\n\nLog in to your account and click SELL / CREATOR PORTAL to publish your digital assets.\n\n© 2026 OMYRA Mall.`
+  },
+  CREATOR_REJECTED: {
+    id: 'tpl-creator-rejected',
+    name: 'Creator Onboarding Rejected',
+    subject: 'Update on your OMYRA Creator Application 📋',
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Update on OMYRA Creator Application</title>
+        <style>
+          body { font-family: 'Inter', sans-serif; background-color: #0b0b0c; color: #ffffff; margin: 0; padding: 20px; }
+          .container { max-width: 600px; margin: 0 auto; background-color: #161618; border-radius: 12px; border: 1px solid #27272a; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+          .header { text-align: center; border-bottom: 1px solid #27272a; padding-bottom: 20px; margin-bottom: 24px; }
+          .logo { font-size: 24px; font-weight: bold; color: #ff5e5e; text-transform: uppercase; letter-spacing: 2px; }
+          .content { line-height: 1.6; color: #e4e4e7; }
+          .status-badge { display: inline-block; background-color: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); font-weight: bold; text-decoration: none; padding: 8px 16px; border-radius: 8px; margin: 15px 0; text-transform: uppercase; letter-spacing: 1px; font-size: 12px; }
+          .reason-box { background-color: #1e1e21; border-radius: 8px; border: 1px solid #ff5e5e; padding: 16px; margin: 20px 0; color: #e4e4e7; font-size: 13px; }
+          .footer { text-align: center; color: #71717a; font-size: 12px; border-top: 1px solid #27272a; padding-top: 20px; margin-top: 32px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <span class="logo">OMYRA MALL</span>
+          </div>
+          <div class="content">
+            <h3>Hello {{userName}},</h3>
+            <p>Thank you for your interest in joining the OMYRA Mall creator network. Our team has finished evaluating your onboarding application.</p>
+            
+            <p>Unfortunately, we are unable to approve your application at this time due to compliance check limitations.</p>
+            
+            <div style="text-align: center;">
+              <span class="status-badge">Application Status: Rejected ❌</span>
+            </div>
+            
+            <div class="reason-box">
+              <strong>Decline Reason:</strong> {{reason}}
+            </div>
+            
+            <p>Please verify that your document uploads are fully legible, match your legal name exactly, and do not contain blurred edges or background obstructions. If you wish to re-submit your materials with correct configurations, you can click <strong>SELL / CREATOR PORTAL</strong> inside the platform to correct your data and re-submit.</p>
+            
+            <p>Thank you for your cooperation.</p>
+            <p>Best regards,<br/>OMYRA Mall Seller Compliance Division</p>
+          </div>
+          <div class="footer">
+            <p>© 2026 OMYRA Mall Infrastructure Layer. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `Hello {{userName}},\n\nThank you for your interest in OMYRA Mall.\n\nUnfortunately, we were unable to approve your application at this time.\nStatus: Rejected\nReason: {{reason}}\n\nYou can re-submit your details with correct documents by clicking SELL / CREATOR PORTAL.\n\n© 2026 OMYRA Mall.`
   }
 };
 
@@ -347,8 +516,9 @@ export class EmailService {
       // Find priority pending jobs where next_attempt_at <= CURRENT_TIMESTAMP
       // Order by priority DESC, created_at ASC
       pendingJobs = await dbAll(`
-        SELECT * FROM EmailJobs 
-        WHERE status = 'pending' OR status = 'failed'
+        (SELECT * FROM EmailJobs WHERE status = 'pending' ORDER BY priority DESC, created_at ASC LIMIT 5)
+        UNION ALL
+        (SELECT * FROM EmailJobs WHERE status = 'failed' ORDER BY priority DESC, created_at ASC LIMIT 5)
         ORDER BY priority DESC, created_at ASC 
         LIMIT 5
       `);

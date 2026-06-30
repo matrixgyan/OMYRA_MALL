@@ -112,6 +112,7 @@ export class StorageService {
     const { client, isLocal } = getS3Client();
 
     const objectId = crypto.randomUUID();
+    let finalProvider = isLocal ? 'local_emulator' : 'cloudflare_r2';
 
     if (isLocal) {
       // Local Storage Mode
@@ -122,20 +123,29 @@ export class StorageService {
       console.log(`[Local Storage] Stored Object in: ${localFilePath}`);
     } else if (client) {
       // Real Cloudflare R2 Mode
-      await client.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: buffer,
-          ContentType: contentType,
-          Metadata: {
-            sha256,
-            originalFilename,
-            uploadedBy,
-            objectId
-          }
-        })
-      );
+      try {
+        await client.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: buffer,
+            ContentType: contentType,
+            Metadata: {
+              sha256,
+              originalFilename,
+              uploadedBy,
+              objectId
+            }
+          })
+        );
+      } catch (err: any) {
+        console.warn(`⚠️ Cloud upload to bucket "${bucket}" failed (${err.message}). Falling back to local emulator storage.`);
+        finalProvider = 'local_emulator_fallback';
+        const localBucketPath = path.join(LOCAL_STORAGE_DIR, bucket);
+        const localFilePath = path.join(localBucketPath, key);
+        fs.mkdirSync(path.dirname(localFilePath), { recursive: true });
+        fs.writeFileSync(localFilePath, buffer);
+      }
     }
 
     const metadata: StorageObjectMetadata = {
@@ -148,7 +158,7 @@ export class StorageService {
       sha256_hash: sha256,
       upload_time: new Date().toISOString(),
       uploaded_by: uploadedBy,
-      storage_provider: isLocal ? 'local_emulator' : 'cloudflare_r2',
+      storage_provider: finalProvider,
       storage_region: 'auto',
       visibility,
       download_count: 0
@@ -181,7 +191,7 @@ export class StorageService {
       'Upload Completed',
       bucket,
       key,
-      JSON.stringify({ objectId, size, contentType, sha256 })
+      JSON.stringify({ objectId, size, contentType, sha256, provider: finalProvider })
     );
 
     return metadata;
@@ -202,8 +212,9 @@ export class StorageService {
       [bucket, key]
     );
 
-    if (isLocal) {
-      const localFilePath = path.join(LOCAL_STORAGE_DIR, bucket, key);
+    const localFilePath = path.join(LOCAL_STORAGE_DIR, bucket, key);
+
+    if (isLocal || fs.existsSync(localFilePath)) {
       if (!fs.existsSync(localFilePath)) {
         throw new Error('Object not found in local storage.');
       }
@@ -214,19 +225,32 @@ export class StorageService {
         originalFilename: meta ? meta.original_filename : path.basename(key)
       };
     } else if (client) {
-      const response = await client.send(
-        new GetObjectCommand({
-          Bucket: bucket,
-          Key: key
-        })
-      );
-      const byteArray = await response.Body?.transformToByteArray();
-      const buffer = Buffer.from(byteArray || []);
-      return {
-        body: buffer,
-        contentType: response.ContentType || meta?.content_type || 'application/octet-stream',
-        originalFilename: meta?.original_filename || path.basename(key)
-      };
+      try {
+        const response = await client.send(
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: key
+          })
+        );
+        const byteArray = await response.Body?.transformToByteArray();
+        const buffer = Buffer.from(byteArray || []);
+        return {
+          body: buffer,
+          contentType: response.ContentType || meta?.content_type || 'application/octet-stream',
+          originalFilename: meta?.original_filename || path.basename(key)
+        };
+      } catch (err) {
+        // Safe check for local fallback file
+        if (fs.existsSync(localFilePath)) {
+          const buffer = fs.readFileSync(localFilePath);
+          return {
+            body: buffer,
+            contentType: meta ? meta.content_type : 'application/octet-stream',
+            originalFilename: meta ? meta.original_filename : path.basename(key)
+          };
+        }
+        throw err;
+      }
     }
 
     throw new Error('Storage service is unavailable.');
@@ -237,19 +261,26 @@ export class StorageService {
    */
   static async deleteObject(bucket: string, key: string, deletedBy: string): Promise<void> {
     const { client, isLocal } = getS3Client();
+    const localFilePath = path.join(LOCAL_STORAGE_DIR, bucket, key);
 
     if (isLocal) {
-      const localFilePath = path.join(LOCAL_STORAGE_DIR, bucket, key);
       if (fs.existsSync(localFilePath)) {
         fs.unlinkSync(localFilePath);
       }
     } else if (client) {
-      await client.send(
-        new DeleteObjectCommand({
-          Bucket: bucket,
-          Key: key
-        })
-      );
+      try {
+        await client.send(
+          new DeleteObjectCommand({
+            Bucket: bucket,
+            Key: key
+          })
+        );
+      } catch (err) {
+        console.warn(`⚠️ Cloud delete from bucket "${bucket}" failed:`, err);
+      }
+      if (fs.existsSync(localFilePath)) {
+        fs.unlinkSync(localFilePath);
+      }
     }
 
     // Delete metadata record
@@ -281,22 +312,36 @@ export class StorageService {
       throw new Error('Source object metadata not found in database.');
     }
 
+    const sourcePath = path.join(LOCAL_STORAGE_DIR, sourceBucket, sourceKey);
+    const destPath = path.join(LOCAL_STORAGE_DIR, destBucket, destKey);
+    let copiedLocally = false;
+
     if (isLocal) {
-      const sourcePath = path.join(LOCAL_STORAGE_DIR, sourceBucket, sourceKey);
-      const destPath = path.join(LOCAL_STORAGE_DIR, destBucket, destKey);
       if (!fs.existsSync(sourcePath)) {
         throw new Error('Source file missing in local storage.');
       }
       fs.mkdirSync(path.dirname(destPath), { recursive: true });
       fs.copyFileSync(sourcePath, destPath);
+      copiedLocally = true;
     } else if (client) {
-      await client.send(
-        new CopyObjectCommand({
-          Bucket: destBucket,
-          Key: destKey,
-          CopySource: `${sourceBucket}/${sourceKey}`
-        })
-      );
+      try {
+        await client.send(
+          new CopyObjectCommand({
+            Bucket: destBucket,
+            Key: destKey,
+            CopySource: `${sourceBucket}/${sourceKey}`
+          })
+        );
+      } catch (err) {
+        console.warn(`⚠️ Cloud copy failed (${err}). Performing fallback local copy.`);
+        if (fs.existsSync(sourcePath)) {
+          fs.mkdirSync(path.dirname(destPath), { recursive: true });
+          fs.copyFileSync(sourcePath, destPath);
+          copiedLocally = true;
+        } else {
+          throw err;
+        }
+      }
     }
 
     // Insert new metadata
@@ -312,7 +357,7 @@ export class StorageService {
         sourceMeta.file_size,
         sourceMeta.sha256_hash,
         copiedBy,
-        sourceMeta.storage_provider,
+        copiedLocally ? 'local_emulator_fallback' : sourceMeta.storage_provider,
         sourceMeta.storage_region,
         sourceMeta.visibility
       ]
@@ -353,9 +398,9 @@ export class StorageService {
    */
   static async objectExists(bucket: string, key: string): Promise<boolean> {
     const { client, isLocal } = getS3Client();
+    const localFilePath = path.join(LOCAL_STORAGE_DIR, bucket, key);
 
-    if (isLocal) {
-      const localFilePath = path.join(LOCAL_STORAGE_DIR, bucket, key);
+    if (isLocal || fs.existsSync(localFilePath)) {
       return fs.existsSync(localFilePath);
     } else if (client) {
       try {
@@ -367,6 +412,9 @@ export class StorageService {
         );
         return true;
       } catch (err) {
+        if (fs.existsSync(localFilePath)) {
+          return true;
+        }
         return false;
       }
     }
@@ -378,8 +426,9 @@ export class StorageService {
    */
   static async generateSignedUrl(bucket: string, key: string, expiresInSeconds = 3600): Promise<string> {
     const { client, isLocal } = getS3Client();
+    const localFilePath = path.join(LOCAL_STORAGE_DIR, bucket, key);
 
-    if (isLocal) {
+    if (isLocal || fs.existsSync(localFilePath)) {
       // Local Signed URL emulator using direct server routes with secure transient tokens
       const token = crypto.randomBytes(32).toString('hex');
       const expiry = Date.now() + expiresInSeconds * 1000;
@@ -393,11 +442,23 @@ export class StorageService {
 
       return `/api/storage/emulator-download?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}&token=${token}`;
     } else if (client) {
-      const command = new GetObjectCommand({
-        Bucket: bucket,
-        Key: key
-      });
-      return await getSignedUrl(client, command, { expiresIn: expiresInSeconds });
+      try {
+        const command = new GetObjectCommand({
+          Bucket: bucket,
+          Key: key
+        });
+        return await getSignedUrl(client, command, { expiresIn: expiresInSeconds });
+      } catch (err) {
+        console.warn(`⚠️ Generating signed URL failed (${err}). Falling back to local emulator URL.`);
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiry = Date.now() + expiresInSeconds * 1000;
+        await dbRun(
+          `INSERT INTO StoragePolicies (id, bucket, principal, action, effect, conditions)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [crypto.randomUUID(), bucket, token, 'read', 'allow', JSON.stringify({ expiry, key })]
+        );
+        return `/api/storage/emulator-download?bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}&token=${token}`;
+      }
     }
 
     throw new Error('Storage service is offline.');
